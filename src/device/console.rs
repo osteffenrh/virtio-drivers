@@ -116,9 +116,9 @@ impl<H: Hal, T: Transport> VirtIOConsole<H, T> {
     pub fn info(&self) -> ConsoleInfo {
         // Safe because config_space is a valid pointer to the device configuration space.
         unsafe {
-            let columns = volread!(self.config_space, cols);
-            let rows = volread!(self.config_space, rows);
-            let max_ports = volread!(self.config_space, max_nr_ports);
+            let columns = volread!(H, self.config_space, cols);
+            let rows = volread!(H, self.config_space, rows);
+            let max_ports = volread!(H, self.config_space, max_nr_ports);
             ConsoleInfo {
                 rows,
                 columns,
