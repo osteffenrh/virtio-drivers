@@ -1,5 +1,8 @@
 #![deny(unsafe_op_in_unsafe_fn)]
 
+#[cfg(feature = "alloc")]
+pub mod owning;
+
 use crate::hal::{BufferDirection, Dma, Hal, PhysAddr};
 use crate::transport::Transport;
 use crate::{align_up, nonnull_slice_from_raw_parts, pages, Error, Result, PAGE_SIZE};
@@ -8,6 +11,7 @@ use alloc::boxed::Box;
 use bitflags::bitflags;
 #[cfg(test)]
 use core::cmp::min;
+use core::convert::TryInto;
 use core::hint::spin_loop;
 use core::mem::{size_of, take};
 #[cfg(test)]
@@ -21,7 +25,7 @@ use zerocopy::{AsBytes, FromBytes, FromZeroes};
 /// Each device can have zero or more virtqueues.
 ///
 /// * `SIZE`: The size of the queue. This is both the number of descriptors, and the number of slots
-///   in the available and used rings.
+///   in the available and used rings. It must be a power of 2 and fit in a [`u16`].
 #[derive(Debug)]
 pub struct VirtQueue<H: Hal, const SIZE: usize> {
     /// DMA guard
@@ -61,6 +65,8 @@ pub struct VirtQueue<H: Hal, const SIZE: usize> {
 }
 
 impl<H: Hal, const SIZE: usize> VirtQueue<H, SIZE> {
+    const SIZE_OK: () = assert!(SIZE.is_power_of_two() && SIZE <= u16::MAX as usize);
+
     /// Creates a new VirtQueue.
     ///
     /// * `indirect`: Whether to use indirect descriptors. This should be set if the
@@ -74,13 +80,13 @@ impl<H: Hal, const SIZE: usize> VirtQueue<H, SIZE> {
         indirect: bool,
         event_idx: bool,
     ) -> Result<Self> {
+        #[allow(clippy::let_unit_value)]
+        let _ = Self::SIZE_OK;
+
         if transport.queue_used(idx) {
             return Err(Error::AlreadyUsed);
         }
-        if !SIZE.is_power_of_two()
-            || SIZE > u16::MAX.into()
-            || transport.max_queue_size(idx) < SIZE as u32
-        {
+        if transport.max_queue_size(idx) < SIZE as u32 {
             return Err(Error::InvalidParam);
         }
         let size = SIZE as u16;
@@ -715,7 +721,7 @@ impl Descriptor {
         unsafe {
             self.addr = H::share(buf, direction) as u64;
         }
-        self.len = buf.len() as u32;
+        self.len = buf.len().try_into().unwrap();
         self.flags = extra_flags
             | match direction {
                 BufferDirection::DeviceToDriver => DescFlags::WRITE,
@@ -834,13 +840,16 @@ fn take_first_mut<'a, T>(slice: &mut &'a mut [T]) -> Option<&'a mut T> {
 /// Simulates the device reading from a VirtIO queue and writing a response back, for use in tests.
 ///
 /// The fake device always uses descriptors in order.
+///
+/// Returns true if a descriptor chain was available and processed, or false if no descriptors were
+/// available.
 #[cfg(test)]
 pub(crate) fn fake_read_write_queue<const QUEUE_SIZE: usize>(
     descriptors: *const [Descriptor; QUEUE_SIZE],
     queue_driver_area: *const u8,
     queue_device_area: *mut u8,
     handler: impl FnOnce(Vec<u8>) -> Vec<u8>,
-) {
+) -> bool {
     use core::{ops::Deref, slice};
 
     let available_ring = queue_driver_area as *const AvailRing<QUEUE_SIZE>;
@@ -850,10 +859,10 @@ pub(crate) fn fake_read_write_queue<const QUEUE_SIZE: usize>(
     // nothing else accesses them during this block.
     unsafe {
         // Make sure there is actually at least one descriptor available to read from.
-        assert_ne!(
-            (*available_ring).idx.load(Ordering::Acquire),
-            (*used_ring).idx.load(Ordering::Acquire)
-        );
+        if (*available_ring).idx.load(Ordering::Acquire) == (*used_ring).idx.load(Ordering::Acquire)
+        {
+            return false;
+        }
         // The fake device always uses descriptors in order, like VIRTIO_F_IN_ORDER, so
         // `used_ring.idx` marks the next descriptor we should take from the available ring.
         let next_slot = (*used_ring).idx.load(Ordering::Acquire) & (QUEUE_SIZE as u16 - 1);
@@ -955,9 +964,11 @@ pub(crate) fn fake_read_write_queue<const QUEUE_SIZE: usize>(
         }
 
         // Mark the buffer as used.
-        (*used_ring).ring[next_slot as usize].id = head_descriptor_index as u32;
+        (*used_ring).ring[next_slot as usize].id = head_descriptor_index.into();
         (*used_ring).ring[next_slot as usize].len = (input_length + output.len()) as u32;
         (*used_ring).idx.fetch_add(1, Ordering::AcqRel);
+
+        true
     }
 }
 
@@ -975,17 +986,6 @@ mod tests {
     };
     use core::ptr::NonNull;
     use std::sync::{Arc, Mutex};
-
-    #[test]
-    fn invalid_queue_size() {
-        let mut header = VirtIOHeader::make_fake_header(MODERN_VERSION, 1, 0, 0, 4);
-        let mut transport = unsafe { MmioTransport::new(NonNull::from(&mut header)) }.unwrap();
-        // Size not a power of 2.
-        assert_eq!(
-            VirtQueue::<FakeHal, 3>::new(&mut transport, 0, false, false).unwrap_err(),
-            Error::InvalidParam
-        );
-    }
 
     #[test]
     fn queue_too_big() {

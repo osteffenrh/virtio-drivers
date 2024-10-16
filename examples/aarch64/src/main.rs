@@ -21,7 +21,7 @@ use core::{
     panic::PanicInfo,
     ptr::{self, NonNull},
 };
-use fdt::{node::FdtNode, standard_nodes::Compatible, Fdt};
+use flat_device_tree::{node::FdtNode, standard_nodes::Compatible, Fdt};
 use hal::HalImpl;
 use log::{debug, error, info, trace, warn, LevelFilter};
 use smccc::{psci::system_off, Hvc};
@@ -86,27 +86,23 @@ extern "C" fn main(x0: u64, x1: u64, x2: u64, x3: u64) {
             node.name,
             node.compatible().map(Compatible::first),
         );
-        if let Some(reg) = node.reg() {
-            for range in reg {
-                trace!(
-                    "  {:#018x?}, length {:?}",
-                    range.starting_address,
-                    range.size
-                );
-            }
+        for range in node.reg() {
+            trace!(
+                "  {:#018x?}, length {:?}",
+                range.starting_address,
+                range.size
+            );
         }
 
         // Check whether it is a VirtIO MMIO device.
-        if let (Some(compatible), Some(region)) =
-            (node.compatible(), node.reg().and_then(|mut reg| reg.next()))
-        {
+        if let (Some(compatible), Some(region)) = (node.compatible(), node.reg().next()) {
             if compatible.all().any(|s| s == "virtio,mmio")
                 && region.size.unwrap_or(0) > size_of::<VirtIOHeader>()
             {
                 debug!("Found VirtIO MMIO device at {:?}", region);
 
                 let header = NonNull::new(region.starting_address as *mut VirtIOHeader).unwrap();
-                match unsafe { MmioTransport::new(header) } {
+                match unsafe { MmioTransport::<HalImpl>::new(header) } {
                     Err(e) => warn!("Error creating VirtIO MMIO transport: {}", e),
                     Ok(transport) => {
                         info!(
@@ -271,8 +267,8 @@ enum PciRangeType {
     Memory64,
 }
 
-impl From<u8> for PciRangeType {
-    fn from(value: u8) -> Self {
+impl From<u32> for PciRangeType {
+    fn from(value: u32) -> Self {
         match value {
             0 => Self::ConfigurationSpace,
             1 => Self::IoSpace,
@@ -284,7 +280,7 @@ impl From<u8> for PciRangeType {
 }
 
 fn enumerate_pci(pci_node: FdtNode, cam: Cam) {
-    let reg = pci_node.reg().expect("PCI node missing reg property.");
+    let reg = pci_node.reg();
     let mut allocator = PciMemory32Allocator::for_pci_ranges(&pci_node);
 
     for region in reg {
@@ -328,18 +324,14 @@ struct PciMemory32Allocator {
 impl PciMemory32Allocator {
     /// Creates a new allocator based on the ranges property of the given PCI node.
     pub fn for_pci_ranges(pci_node: &FdtNode) -> Self {
-        let ranges = pci_node
-            .property("ranges")
-            .expect("PCI node missing ranges property.");
         let mut memory_32_address = 0;
         let mut memory_32_size = 0;
-        for i in 0..ranges.value.len() / 28 {
-            let range = &ranges.value[i * 28..(i + 1) * 28];
-            let prefetchable = range[0] & 0x80 != 0;
-            let range_type = PciRangeType::from(range[0] & 0x3);
-            let bus_address = u64::from_be_bytes(range[4..12].try_into().unwrap());
-            let cpu_physical = u64::from_be_bytes(range[12..20].try_into().unwrap());
-            let size = u64::from_be_bytes(range[20..28].try_into().unwrap());
+        for range in pci_node.ranges() {
+            let prefetchable = range.child_bus_address_hi & 0x4000_0000 != 0;
+            let range_type = PciRangeType::from((range.child_bus_address_hi & 0x0300_0000) >> 24);
+            let bus_address = range.child_bus_address as u64;
+            let cpu_physical = range.parent_bus_address as u64;
+            let size = range.size as u64;
             info!(
                 "range: {:?} {}prefetchable bus address: {:#018x} host physical address: {:#018x} size: {:#018x}",
                 range_type,
@@ -411,9 +403,8 @@ fn allocate_bars(
     device_function: DeviceFunction,
     allocator: &mut PciMemory32Allocator,
 ) {
-    let mut bar_index = 0;
-    while bar_index < 6 {
-        let info = root.bar_info(device_function, bar_index).unwrap();
+    for (bar_index, info) in root.bars(device_function).unwrap().into_iter().enumerate() {
+        let Some(info) = info else { continue };
         debug!("BAR {}: {}", bar_index, info);
         // Ignore I/O bars, as they aren't required for the VirtIO driver.
         if let BarInfo::Memory {
@@ -425,24 +416,19 @@ fn allocate_bars(
                     if size > 0 {
                         let address = allocator.allocate_memory_32(size);
                         debug!("Allocated address {:#010x}", address);
-                        root.set_bar_32(device_function, bar_index, address);
+                        root.set_bar_32(device_function, bar_index as u8, address);
                     }
                 }
                 MemoryBarType::Width64 => {
                     if size > 0 {
                         let address = allocator.allocate_memory_32(size);
                         debug!("Allocated address {:#010x}", address);
-                        root.set_bar_64(device_function, bar_index, address.into());
+                        root.set_bar_64(device_function, bar_index as u8, address.into());
                     }
                 }
 
                 _ => panic!("Memory BAR address type {:?} not supported.", address_type),
             }
-        }
-
-        bar_index += 1;
-        if info.takes_two_entries() {
-            bar_index += 1;
         }
     }
 

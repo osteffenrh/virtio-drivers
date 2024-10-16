@@ -8,11 +8,11 @@ use crate::{Error, Result};
 use log::{debug, info, warn};
 use zerocopy::AsBytes;
 
-/// Raw driver for a VirtIO block device.
+/// Raw driver for a VirtIO network device.
 ///
 /// This is a raw version of the VirtIONet driver. It provides non-blocking
 /// methods for transmitting and receiving raw slices, without the buffer
-/// management. For more higher-level fucntions such as receive buffer backing,
+/// management. For more higher-level functions such as receive buffer backing,
 /// see [`VirtIONet`].
 ///
 /// [`VirtIONet`]: super::VirtIONet
@@ -33,23 +33,23 @@ impl<H: Hal, T: Transport, const QUEUE_SIZE: usize> VirtIONetRaw<H, T, QUEUE_SIZ
         let mac;
         // Safe because config points to a valid MMIO region for the config space.
         unsafe {
-            mac = volread!(config, mac);
+            mac = volread!(H, config, mac);
             debug!(
                 "Got MAC={:02x?}, status={:?}",
                 mac,
-                volread!(config, status)
+                volread!(H, config, status)
             );
         }
         let send_queue = VirtQueue::new(
             &mut transport,
             QUEUE_TRANSMIT,
-            false,
+            negotiated_features.contains(Features::RING_INDIRECT_DESC),
             negotiated_features.contains(Features::RING_EVENT_IDX),
         )?;
         let recv_queue = VirtQueue::new(
             &mut transport,
             QUEUE_RECEIVE,
-            false,
+            negotiated_features.contains(Features::RING_INDIRECT_DESC),
             negotiated_features.contains(Features::RING_EVENT_IDX),
         )?;
 

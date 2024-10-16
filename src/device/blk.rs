@@ -59,7 +59,7 @@ impl<H: Hal, T: Transport> VirtIOBlk<H, T> {
         info!("config: {:?}", config);
         // Safe because config is a valid pointer to the device configuration space.
         let capacity = unsafe {
-            volread!(config, capacity_low) as u64 | (volread!(config, capacity_high) as u64) << 32
+            volread!(H, config, capacity_low) as u64 | (volread!(H, config, capacity_high) as u64) << 32
         };
         info!("found a block device of size {}KB", capacity / 2);
 
@@ -632,7 +632,7 @@ mod tests {
             State::wait_until_queue_notified(&state, QUEUE);
             println!("Transmit queue was notified.");
 
-            state
+            assert!(state
                 .lock()
                 .unwrap()
                 .read_write_queue::<{ QUEUE_SIZE as usize }>(QUEUE, |request| {
@@ -656,7 +656,7 @@ mod tests {
                     );
 
                     response
-                });
+                }));
         });
 
         // Read a block from the device.
@@ -702,7 +702,7 @@ mod tests {
             State::wait_until_queue_notified(&state, QUEUE);
             println!("Transmit queue was notified.");
 
-            state
+            assert!(state
                 .lock()
                 .unwrap()
                 .read_write_queue::<{ QUEUE_SIZE as usize }>(QUEUE, |request| {
@@ -728,7 +728,7 @@ mod tests {
                     );
 
                     response
-                });
+                }));
         });
 
         // Write a block to the device.
@@ -777,7 +777,7 @@ mod tests {
             State::wait_until_queue_notified(&state, QUEUE);
             println!("Transmit queue was notified.");
 
-            state
+            assert!(state
                 .lock()
                 .unwrap()
                 .read_write_queue::<{ QUEUE_SIZE as usize }>(QUEUE, |request| {
@@ -800,7 +800,7 @@ mod tests {
                     );
 
                     response
-                });
+                }));
         });
 
         // Request to flush.
@@ -844,7 +844,7 @@ mod tests {
             State::wait_until_queue_notified(&state, QUEUE);
             println!("Transmit queue was notified.");
 
-            state
+            assert!(state
                 .lock()
                 .unwrap()
                 .read_write_queue::<{ QUEUE_SIZE as usize }>(QUEUE, |request| {
@@ -868,7 +868,7 @@ mod tests {
                     );
 
                     response
-                });
+                }));
         });
 
         let mut id = [0; 20];
