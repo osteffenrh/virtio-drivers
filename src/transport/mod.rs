@@ -7,6 +7,7 @@ pub mod pci;
 
 use crate::{PhysAddr, Result, PAGE_SIZE};
 use bitflags::{bitflags, Flags};
+use zerocopy::{FromBytes, Immutable, IntoBytes};
 use core::{fmt::Debug, ops::BitAnd, ptr::NonNull};
 use log::debug;
 
@@ -102,10 +103,13 @@ pub trait Transport {
     fn config_space<T: 'static>(&self) -> Result<NonNull<T>>;
 }
 
+/// DeviceStatus
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, IntoBytes, FromBytes, Immutable)]
+pub struct DeviceStatus(u32);
+
 bitflags! {
     /// The device status field. Writing 0 into this field resets the device.
-    #[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
-    pub struct DeviceStatus: u32 {
+    impl DeviceStatus : u32 {
         /// Indicates that the guest OS has found the device and recognized it
         /// as a valid virtio device.
         const ACKNOWLEDGE = 1;

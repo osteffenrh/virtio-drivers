@@ -81,18 +81,30 @@ bitflags! {
     }
 }
 
+/// Status
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, FromBytes, IntoBytes, Immutable)]
+pub struct Status(u16);
+
 bitflags! {
-    #[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
-    struct Status: u16 {
+    /// a
+    impl Status: u16 {
+        /// a
         const LINK_UP = 1;
+        /// a
         const ANNOUNCE = 2;
     }
 }
 
+/// InterruptStatus
+#[derive(Copy, Clone, Debug, Default, Eq, PartialEq, FromBytes, IntoBytes, Immutable)]
+pub struct InterruptStatus(u32);
+
 bitflags! {
-    #[derive(Copy, Clone, Debug, Default, Eq, PartialEq)]
-    struct InterruptStatus : u32 {
+    /// a
+    impl InterruptStatus : u32 {
+        /// a
         const USED_RING_UPDATE = 1 << 0;
+        /// a
         const CONFIGURATION_CHANGE = 1 << 1;
     }
 }
