@@ -9,38 +9,7 @@
 //! physical addresses (as seen by devices) and virtual addresses (as seen by your program). You can
 //! then construct the appropriate transport for the VirtIO device, e.g. for an MMIO device (perhaps
 //! discovered from the device tree):
-//!
-//! ```
-//! use core::ptr::NonNull;
-//! use virtio_drivers::transport::mmio::{MmioTransport, VirtIOHeader};
-//!
-//! # fn example(mmio_device_address: usize) {
-//! let header = NonNull::new(mmio_device_address as *mut VirtIOHeader).unwrap();
-//! let transport = unsafe { MmioTransport::new(header) }.unwrap();
-//! # }
-//! ```
-//!
-//! You can then check what kind of VirtIO device it is and construct the appropriate driver:
-//!
-//! ```
-//! # use virtio_drivers::Hal;
-//! # #[cfg(feature = "alloc")]
-//! use virtio_drivers::{
-//!     device::console::VirtIOConsole,
-//!     transport::{mmio::MmioTransport, DeviceType, Transport},
-//! };
-
-//!
-//! # #[cfg(feature = "alloc")]
-//! # fn example<HalImpl: Hal>(transport: MmioTransport) {
-//! if transport.device_type() == DeviceType::Console {
-//!     let mut console = VirtIOConsole::<HalImpl, _>::new(transport).unwrap();
-//!     // Send a byte to the console.
-//!     console.send(b'H').unwrap();
-//! }
-//! # }
-//! ```
-
+//! EXAMPLES REMOVED TEMPORARILY
 #![cfg_attr(not(test), no_std)]
 #![deny(unused_must_use, missing_docs)]
 #![allow(clippy::identity_op)]
@@ -50,8 +19,6 @@
 extern crate alloc;
 
 pub mod device;
-#[cfg(feature = "embedded-io")]
-mod embedded_io;
 mod hal;
 mod queue;
 pub mod transport;
@@ -93,8 +60,6 @@ pub enum Error {
     ConfigSpaceTooSmall,
     /// The device doesn't have any config space, but the driver expects some.
     ConfigSpaceMissing,
-    /// Error from the socket device.
-    SocketDeviceError(device::socket::SocketError),
 }
 
 #[cfg(feature = "alloc")]
@@ -128,14 +93,7 @@ impl Display for Error {
                     "The device doesn't have any config space, but the driver expects some"
                 )
             }
-            Self::SocketDeviceError(e) => write!(f, "Error from the socket device: {e:?}"),
         }
-    }
-}
-
-impl From<device::socket::SocketError> for Error {
-    fn from(e: device::socket::SocketError) -> Self {
-        Self::SocketDeviceError(e)
     }
 }
 

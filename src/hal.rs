@@ -1,6 +1,8 @@
 #[cfg(test)]
 pub mod fake;
 
+use zerocopy::{FromBytes, Immutable, IntoBytes};
+
 use crate::{Error, Result, PAGE_SIZE};
 use core::{marker::PhantomData, ptr::NonNull};
 
@@ -62,7 +64,7 @@ impl<H: Hal> Dma<H> {
 
 impl<H: Hal> Drop for Dma<H> {
     fn drop(&mut self) {
-        // Safe because the memory was previously allocated by `dma_alloc` in `Dma::new`, not yet
+        // SAFETY: Safe because the memory was previously allocated by `dma_alloc` in `Dma::new`, not yet
         // deallocated, and we are passing the values from then.
         let err = unsafe { H::dma_dealloc(self.paddr, self.vaddr, self.pages) };
         assert_eq!(err, 0, "failed to deallocate DMA");
@@ -138,6 +140,41 @@ pub unsafe trait Hal {
     /// any other thread for the duration of this method call. The `paddr` must be the value
     /// previously returned by the corresponding `share` call.
     unsafe fn unshare(paddr: PhysAddr, buffer: NonNull<[u8]>, direction: BufferDirection);
+
+    /// Performs memory mapped read from location of `src`. `src` itself is not modified,
+    /// the value is returned instead.
+    ///
+    /// The default implementation performs a regular volatile_read. This method is intended
+    /// to be overwritten in case MMIO memory needs to be accessed in a special way (for example AMD SEV-SNP).
+    ///
+    /// # Safety
+    ///
+    /// `src` must be properly alinged and reside at a readable memory address.
+    unsafe fn mmio_read<T>(src: &T) -> T
+    where
+        T: FromBytes + Immutable,
+    {
+        // SAFETY: `src` is assumed to be properly aligned and within readale memory
+        unsafe { (src as *const T).read_volatile() }
+    }
+
+    /// Performs memory mapped write of `value` to the location of `dst`.
+    ///
+    /// The default implementation performs a regular volatile_write. This method is intended
+    /// to be overwritten in case MMIO memory needs to be accessed in a special way (for example AMD SEV-SNP).
+    ///
+    /// # Safety
+    ///
+    /// `dst` must be properly alinged and reside at a writable memory address.
+    unsafe fn mmio_write<T>(dst: &mut T, value: T)
+    where
+        T: IntoBytes + Immutable,
+    {
+        // SAFETY: dst is assumed to be properly alinged and within writeble memory
+        unsafe {
+            (dst as *mut T).write_volatile(value);
+        }
+    }
 }
 
 /// The direction in which a buffer is passed.
