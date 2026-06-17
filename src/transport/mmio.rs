@@ -77,33 +77,33 @@ pub enum MmioError {
 #[repr(C)]
 pub struct VirtIOHeader {
     /// Magic value
-    magic: ReadPure<u32>,
+    pub magic: ReadPure<u32>,
 
     /// Device version number
     ///
     /// Legacy device returns value 0x1.
-    version: ReadPure<u32>,
+    pub version: ReadPure<u32>,
 
     /// Virtio Subsystem Device ID
-    device_id: ReadPure<u32>,
+    pub device_id: ReadPure<u32>,
 
     /// Virtio Subsystem Vendor ID
-    vendor_id: ReadPure<u32>,
+    pub vendor_id: ReadPure<u32>,
 
     /// Flags representing features the device supports
-    device_features: ReadPure<u32>,
+    pub device_features: ReadPure<u32>,
 
     /// Device (host) features word selection
-    device_features_sel: WriteOnly<u32>,
+    pub device_features_sel: WriteOnly<u32>,
 
     /// Reserved
     __r1: [u32; 2],
 
     /// Flags representing device features understood and activated by the driver
-    driver_features: WriteOnly<u32>,
+    pub driver_features: WriteOnly<u32>,
 
     /// Activated (guest) features word selection
-    driver_features_sel: WriteOnly<u32>,
+    pub driver_features_sel: WriteOnly<u32>,
 
     /// Guest page size
     ///
@@ -111,7 +111,7 @@ pub struct VirtIOHeader {
     /// initialization, before any queues are used. This value should be a
     /// power of 2 and is used by the device to calculate the Guest address
     /// of the first queue page (see QueuePFN).
-    legacy_guest_page_size: WriteOnly<u32>,
+    pub legacy_guest_page_size: WriteOnly<u32>,
 
     /// Reserved
     __r2: u32,
@@ -121,7 +121,7 @@ pub struct VirtIOHeader {
     /// Writing to this register selects the virtual queue that the following
     /// operations on the QueueNumMax, QueueNum, QueueAlign and QueuePFN
     /// registers apply to. The index number of the first queue is zero (0x0).
-    queue_sel: WriteOnly<u32>,
+    pub queue_sel: WriteOnly<u32>,
 
     /// Maximum virtual queue size
     ///
@@ -130,21 +130,21 @@ pub struct VirtIOHeader {
     /// This applies to the queue selected by writing to QueueSel and is
     /// allowed only when QueuePFN is set to zero (0x0), so when the queue is
     /// not actively used.
-    queue_num_max: ReadPure<u32>,
+    pub queue_num_max: ReadPure<u32>,
 
     /// Virtual queue size
     ///
     /// Queue size is the number of elements in the queue. Writing to this
     /// register notifies the device what size of the queue the driver will use.
     /// This applies to the queue selected by writing to QueueSel.
-    queue_num: WriteOnly<u32>,
+    pub queue_num: WriteOnly<u32>,
 
     /// Used Ring alignment in the virtual queue
     ///
     /// Writing to this register notifies the device about alignment boundary
     /// of the Used Ring in bytes. This value should be a power of 2 and
     /// applies to the queue selected by writing to QueueSel.
-    legacy_queue_align: WriteOnly<u32>,
+    pub legacy_queue_align: WriteOnly<u32>,
 
     /// Guest physical page number of the virtual queue
     ///
@@ -157,25 +157,25 @@ pub struct VirtIOHeader {
     /// number of the queue, therefore a value other than zero (0x0) means that
     /// the queue is in use. Both read and write accesses apply to the queue
     /// selected by writing to QueueSel.
-    legacy_queue_pfn: ReadPureWrite<u32>,
+    pub legacy_queue_pfn: ReadPureWrite<u32>,
 
     /// new interface only
-    queue_ready: ReadPureWrite<u32>,
+    pub queue_ready: ReadPureWrite<u32>,
 
     /// Reserved
     __r3: [u32; 2],
 
     /// Queue notifier
-    queue_notify: WriteOnly<u32>,
+    pub queue_notify: WriteOnly<u32>,
 
     /// Reserved
     __r4: [u32; 3],
 
     /// Interrupt status
-    interrupt_status: ReadPure<u32>,
+    pub interrupt_status: ReadPure<u32>,
 
     /// Interrupt acknowledge
-    interrupt_ack: WriteOnly<u32>,
+    pub interrupt_ack: WriteOnly<u32>,
 
     /// Reserved
     __r5: [u32; 2],
@@ -187,31 +187,66 @@ pub struct VirtIOHeader {
     /// indicating the OS/driver progress. Writing zero (0x0) to this register
     /// triggers a device reset. The device sets QueuePFN to zero (0x0) for
     /// all queues in the device. Also see 3.1 Device Initialization.
-    status: ReadPureWrite<DeviceStatus>,
+    pub status: ReadPureWrite<DeviceStatus>,
 
     /// Reserved
     __r6: [u32; 3],
 
-    // new interface only since here
-    queue_desc_low: WriteOnly<u32>,
-    queue_desc_high: WriteOnly<u32>,
+    /// Virtqueue’s Descriptor Area 64 bit long physical address (lower 32 bits)
+    ///
+    /// Writing to this register sets the lower 32 bits of the physical address
+    /// of the Descriptor Area of the queue selected by writing to QueueSel.
+    pub queue_desc_low: WriteOnly<u32>,
+
+    /// Virtqueue’s Descriptor Area 64 bit long physical address (higher 32 bits)
+    ///
+    /// Writing to this register sets the higher 32 bits of the physical address
+    /// of the Descriptor Area of the queue selected by writing to QueueSel.
+    pub queue_desc_high: WriteOnly<u32>,
 
     /// Reserved
     __r7: [u32; 2],
 
-    queue_driver_low: WriteOnly<u32>,
-    queue_driver_high: WriteOnly<u32>,
+    /// Virtqueue’s Driver Area 64 bit long physical address (lower 32 bits)
+    ///
+    /// Writing to this register sets the lower 32bits of the location of the
+    /// Driver Area of the queue selected by writing to QueueSel.
+    pub queue_driver_low: WriteOnly<u32>,
+
+    /// Virtqueue’s Driver Area 64 bit long physical address (higher 32 bits)
+    ///
+    /// Writing to this register sets the higher 32 bits of the location of the
+    /// Driver Area of the queue selected by writing to QueueSel.
+    pub queue_driver_high: WriteOnly<u32>,
 
     /// Reserved
     __r8: [u32; 2],
 
-    queue_device_low: WriteOnly<u32>,
-    queue_device_high: WriteOnly<u32>,
+    /// Virtqueue’s Device Area 64 bit long physical address (lower 32 bits)
+    ///
+    /// Writing to this register sets the lower 32 bits of the location of the
+    /// Device Area of the queue selected by writing to QueueSel.
+    pub queue_device_low: WriteOnly<u32>,
+
+    /// Virtqueue’s Device Area 64 bit long physical address (higher 32 bits)
+    ///
+    /// Writing to this register sets the higher 32 bits of the location of the
+    /// Device Area of the queue selected by writing to QueueSel.
+    pub queue_device_high: WriteOnly<u32>,
 
     /// Reserved
     __r9: [u32; 21],
 
-    config_generation: ReadPure<u32>,
+    /// Configuration atomicity value
+    ///
+    /// Reading from this register returns a value describing a version of the
+    /// device-specific configuration space. The driver can then access the
+    /// configuration space and, when finished, read ConfigGeneration again. If
+    /// no part of the configuration space has changed between these two
+    /// ConfigGeneration reads, the returned values are identical. If the values
+    /// are different, the configuration space accesses were not atomic and the
+    /// driver has to perform the operations again.
+    pub config_generation: ReadPure<u32>,
 }
 
 impl VirtIOHeader {
